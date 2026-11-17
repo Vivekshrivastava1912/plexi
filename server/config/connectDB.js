@@ -84,12 +84,12 @@ async function connectDB() {
   const mongoURI =
     process.env.MONGODB_URI ||
     process.env.MONGODB_URL ||
-    "mongodb://localhost:27017/";
+    "mongodb://localhost:27017/support_ticket_db";
 
   try {
     const conn = await mongoose.connect(mongoURI, {
       dbName: "support_ticket_db",
-      serverSelectionTimeoutMS: 2500,
+      serverSelectionTimeoutMS: 5000,
     });
     isConnected = true;
     await syncSeedDataToMongo();

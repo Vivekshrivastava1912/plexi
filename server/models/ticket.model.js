@@ -65,17 +65,23 @@ const ticketSchema = new mongoose.Schema(
 ticketSchema.pre("save", async function (next) {
   if (!this.ticketId) {
     try {
-      const allTickets = await this.constructor.find({}, { ticketId: 1 }).lean();
-      let maxNum = 1000;
-      for (const t of allTickets) {
-        if (t.ticketId && t.ticketId.startsWith("TCK-")) {
-          const num = parseInt(t.ticketId.replace("TCK-", ""), 10);
-          if (!isNaN(num) && num > maxNum) {
-            maxNum = num;
-          }
+      const lastTicket = await this.constructor
+        .findOne({}, {}, { sort: { createdAt: -1 } })
+        .exec();
+
+      let nextNum = 1001;
+      if (lastTicket && lastTicket.ticketId && lastTicket.ticketId.startsWith("TCK-")) {
+        const parts = lastTicket.ticketId.split("-");
+        const parsed = parseInt(parts[1], 10);
+        if (!isNaN(parsed)) {
+          nextNum = parsed + 1;
         }
+      } else {
+        const count = await this.constructor.countDocuments();
+        nextNum = 1001 + count;
       }
-      this.ticketId = `TCK-${maxNum + 1}`;
+
+      this.ticketId = `TCK-${nextNum}`;
     } catch (err) {
       this.ticketId = `TCK-${Date.now().toString().slice(-6)}`;
     }
@@ -86,3 +92,4 @@ ticketSchema.pre("save", async function (next) {
 const TicketModel = mongoose.models.Ticket || mongoose.model("Ticket", ticketSchema);
 
 export default TicketModel;
+

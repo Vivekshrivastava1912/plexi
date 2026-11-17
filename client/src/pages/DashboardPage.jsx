@@ -73,24 +73,12 @@ const DashboardPage = () => {
   const handleCreateTicket = async (newTicketData) => {
     try {
       const response = await ticketAPI.create(newTicketData);
-      if (response.success && response.data) {
-        showFeedback(`Ticket ${response.data.ticketId || ""} created successfully!`, "success");
-        setStatusFilter("All");
-        setPriorityFilter("All");
-        setSearchQuery("");
-        setTickets((prev) => [
-          response.data,
-          ...prev.filter((t) => (t._id || t.ticketId) !== (response.data._id || response.data.ticketId)),
-        ]);
-        setSummary((prev) => ({
-          ...prev,
-          total: prev.total + 1,
-          open: prev.open + 1,
-        }));
+      if (response.success) {
+        showFeedback(`Ticket ${response.data?.ticketId || ""} created successfully!`, "success");
         await fetchTickets(true);
         return { success: true };
       } else {
-        return { success: false, message: response.message || "Failed to create ticket" };
+        return { success: false, message: response.message };
       }
     } catch (err) {
       return {
@@ -102,19 +90,16 @@ const DashboardPage = () => {
 
   const handleChangeStatus = async (ticket, newStatus) => {
     try {
-      const id = ticket._id || ticket.ticketId;
-      const response = await ticketAPI.updateStatus(id, newStatus);
+      const response = await ticketAPI.updateStatus(ticket._id, newStatus);
       if (response.success) {
         showFeedback(`Ticket status updated to "${newStatus}".`, "success");
         setTickets((prev) =>
-          prev.map((t) =>
-            (t._id === id || t.ticketId === id) ? { ...t, status: newStatus } : t
-          )
+          prev.map((t) => (t._id === ticket._id ? { ...t, status: newStatus } : t))
         );
-        if (selectedTicket && (selectedTicket._id === id || selectedTicket.ticketId === id)) {
+        if (selectedTicket && selectedTicket._id === ticket._id) {
           setSelectedTicket((prev) => ({ ...prev, status: newStatus }));
         }
-        await fetchTickets(true);
+        fetchTickets(true);
       }
     } catch (err) {
       showFeedback(
@@ -138,13 +123,11 @@ const DashboardPage = () => {
     if (!ticketToDelete) return;
     setIsDeleting(true);
     try {
-      const id = ticketToDelete._id || ticketToDelete.ticketId;
-      const response = await ticketAPI.delete(id);
+      const response = await ticketAPI.delete(ticketToDelete._id);
       if (response.success) {
         showFeedback(response.message || "Ticket deleted successfully", "success");
         setIsDeleteModalOpen(false);
         setTicketToDelete(null);
-        setTickets((prev) => prev.filter((t) => t._id !== id && t.ticketId !== id));
         await fetchTickets(true);
       }
     } catch (err) {

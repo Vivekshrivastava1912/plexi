@@ -59,55 +59,54 @@ export async function createTicketController(request, response) {
       });
     }
 
-    let createdTicket = null;
-
     if (isMongoAvailable()) {
-      try {
-        let userId = null;
-        if (request.user && mongoose.Types.ObjectId.isValid(request.user._id || request.user.id)) {
-          userId = request.user._id || request.user.id;
-        }
-
-        const newDoc = new TicketModel({
-          customerName: customerName.trim(),
-          customerEmail: customerEmail.trim().toLowerCase(),
-          subject: subject.trim(),
-          description: description.trim(),
-          priority: chosenPriority,
-          status: chosenStatus,
-          createdBy: userId,
-        });
-
-        await newDoc.save();
-        createdTicket = newDoc.toObject();
-        memoryTickets.unshift(createdTicket);
-      } catch (err) {
-        console.error("Create ticket MongoDB error:", err);
+      let userId = null;
+      if (request.user && mongoose.Types.ObjectId.isValid(request.user._id || request.user.id)) {
+        userId = request.user._id || request.user.id;
       }
-    }
 
-    if (!createdTicket) {
-      const nextIdNum = 1001 + memoryTickets.length;
-      createdTicket = {
-        _id: new mongoose.Types.ObjectId().toString(),
-        ticketId: `TCK-${nextIdNum}`,
+      const newTicket = new TicketModel({
         customerName: customerName.trim(),
         customerEmail: customerEmail.trim().toLowerCase(),
         subject: subject.trim(),
         description: description.trim(),
         priority: chosenPriority,
         status: chosenStatus,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      memoryTickets.unshift(createdTicket);
+        createdBy: userId,
+      });
+
+      await newTicket.save();
+      const savedObj = newTicket.toObject();
+      memoryTickets.unshift(savedObj);
+
+      return response.status(201).json({
+        message: "Ticket created successfully in MongoDB",
+        error: false,
+        success: true,
+        data: savedObj,
+      });
     }
+
+    const nextIdNum = 1001 + memoryTickets.length;
+    const fallbackTicket = {
+      _id: new mongoose.Types.ObjectId().toString(),
+      ticketId: `TCK-${nextIdNum}`,
+      customerName: customerName.trim(),
+      customerEmail: customerEmail.trim().toLowerCase(),
+      subject: subject.trim(),
+      description: description.trim(),
+      priority: chosenPriority,
+      status: chosenStatus,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    memoryTickets.unshift(fallbackTicket);
 
     return response.status(201).json({
       message: "Ticket created successfully",
       error: false,
       success: true,
-      data: createdTicket,
+      data: fallbackTicket,
     });
   } catch (error) {
     return response.status(500).json({
@@ -122,39 +121,52 @@ export async function getAllTicketsController(request, response) {
   try {
     const { status, priority, search } = request.query;
 
-    let all = [];
-
     if (isMongoAvailable()) {
-      try {
-        all = await TicketModel.find({}).sort({ createdAt: -1 }).lean();
-        if (all.length > 0) {
-          memoryTickets = all;
-        } else if (memoryTickets.length > 0) {
-          await TicketModel.insertMany(memoryTickets);
-          all = memoryTickets;
-        }
-      } catch (err) {
-        all = memoryTickets;
+      const query = {};
+      if (status && status !== "All") {
+        query.status = status;
       }
-    } else {
-      all = memoryTickets;
+      if (priority && priority !== "All") {
+        query.priority = priority;
+      }
+      if (search && search.trim() !== "") {
+        const q = search.trim();
+        query.$or = [
+          { ticketId: { $regex: q, $options: "i" } },
+          { customerName: { $regex: q, $options: "i" } },
+          { customerEmail: { $regex: q, $options: "i" } },
+          { subject: { $regex: q, $options: "i" } },
+        ];
+      }
+
+      const tickets = await TicketModel.find(query).sort({ createdAt: -1 }).lean();
+      const totalTickets = await TicketModel.countDocuments();
+      const openTickets = await TicketModel.countDocuments({ status: "Open" });
+      const inProgressTickets = await TicketModel.countDocuments({ status: "In Progress" });
+      const resolvedTickets = await TicketModel.countDocuments({ status: "Resolved" });
+
+      return response.status(200).json({
+        message: "Tickets retrieved successfully from MongoDB",
+        error: false,
+        success: true,
+        count: tickets.length,
+        summary: {
+          total: totalTickets,
+          open: openTickets,
+          inProgress: inProgressTickets,
+          resolved: resolvedTickets,
+        },
+        data: tickets,
+      });
     }
 
-    const totalTickets = all.length;
-    const openTickets = all.filter((t) => t.status === "Open").length;
-    const inProgressTickets = all.filter((t) => t.status === "In Progress").length;
-    const resolvedTickets = all.filter((t) => t.status === "Resolved").length;
-
-    let filtered = [...all];
-
+    let filtered = [...memoryTickets];
     if (status && status !== "All") {
       filtered = filtered.filter((t) => t.status === status);
     }
-
     if (priority && priority !== "All") {
       filtered = filtered.filter((t) => t.priority === priority);
     }
-
     if (search && search.trim() !== "") {
       const q = search.trim().toLowerCase();
       filtered = filtered.filter(
@@ -166,16 +178,21 @@ export async function getAllTicketsController(request, response) {
       );
     }
 
+    const total = memoryTickets.length;
+    const open = memoryTickets.filter((t) => t.status === "Open").length;
+    const inProgress = memoryTickets.filter((t) => t.status === "In Progress").length;
+    const resolved = memoryTickets.filter((t) => t.status === "Resolved").length;
+
     return response.status(200).json({
       message: "Tickets retrieved successfully",
       error: false,
       success: true,
       count: filtered.length,
       summary: {
-        total: totalTickets,
-        open: openTickets,
-        inProgress: inProgressTickets,
-        resolved: resolvedTickets,
+        total,
+        open,
+        inProgress,
+        resolved,
       },
       data: filtered,
     });
@@ -190,34 +207,29 @@ export async function getAllTicketsController(request, response) {
 
 export async function getTicketSummaryController(request, response) {
   try {
-    let all = memoryTickets;
     if (isMongoAvailable()) {
-      try {
-        const total = await TicketModel.countDocuments();
-        if (total > 0) {
-          const open = await TicketModel.countDocuments({ status: "Open" });
-          const inProgress = await TicketModel.countDocuments({ status: "In Progress" });
-          const resolved = await TicketModel.countDocuments({ status: "Resolved" });
+      const total = await TicketModel.countDocuments();
+      const open = await TicketModel.countDocuments({ status: "Open" });
+      const inProgress = await TicketModel.countDocuments({ status: "In Progress" });
+      const resolved = await TicketModel.countDocuments({ status: "Resolved" });
 
-          return response.status(200).json({
-            message: "Summary retrieved successfully",
-            error: false,
-            success: true,
-            data: {
-              total,
-              open,
-              inProgress,
-              resolved,
-            },
-          });
-        }
-      } catch (err) {}
+      return response.status(200).json({
+        message: "Summary retrieved successfully from MongoDB",
+        error: false,
+        success: true,
+        data: {
+          total,
+          open,
+          inProgress,
+          resolved,
+        },
+      });
     }
 
-    const total = all.length;
-    const open = all.filter((t) => t.status === "Open").length;
-    const inProgress = all.filter((t) => t.status === "In Progress").length;
-    const resolved = all.filter((t) => t.status === "Resolved").length;
+    const total = memoryTickets.length;
+    const open = memoryTickets.filter((t) => t.status === "Open").length;
+    const inProgress = memoryTickets.filter((t) => t.status === "In Progress").length;
+    const resolved = memoryTickets.filter((t) => t.status === "Resolved").length;
 
     return response.status(200).json({
       message: "Summary retrieved successfully",
@@ -242,23 +254,36 @@ export async function getTicketSummaryController(request, response) {
 export async function getTicketDetailsController(request, response) {
   try {
     const id = request.params.id;
-    let ticket = null;
 
     if (isMongoAvailable()) {
-      try {
-        if (mongoose.Types.ObjectId.isValid(id)) {
-          ticket = await TicketModel.findById(id).lean();
-        } else {
-          ticket = await TicketModel.findOne({ ticketId: id }).lean();
-        }
-      } catch (err) {}
+      const filter = {
+        $or: [
+          ...(mongoose.Types.ObjectId.isValid(id) ? [{ _id: id }] : []),
+          { ticketId: id },
+        ],
+      };
+
+      const ticket = await TicketModel.findOne(filter).lean();
+
+      if (!ticket) {
+        return response.status(404).json({
+          message: `Ticket not found with id: ${id}`,
+          error: true,
+          success: false,
+        });
+      }
+
+      return response.status(200).json({
+        message: "Ticket details fetched successfully from MongoDB",
+        error: false,
+        success: true,
+        data: ticket,
+      });
     }
 
-    if (!ticket) {
-      ticket = memoryTickets.find(
-        (t) => String(t._id) === String(id) || t.ticketId === id
-      );
-    }
+    const ticket = memoryTickets.find(
+      (t) => String(t._id) === String(id) || t.ticketId === id
+    );
 
     if (!ticket) {
       return response.status(404).json({
@@ -286,18 +311,6 @@ export async function getTicketDetailsController(request, response) {
 export async function updateTicketController(request, response) {
   try {
     const id = request.params.id;
-    let ticket = null;
-
-    if (isMongoAvailable()) {
-      try {
-        if (mongoose.Types.ObjectId.isValid(id)) {
-          ticket = await TicketModel.findById(id);
-        } else {
-          ticket = await TicketModel.findOne({ ticketId: id });
-        }
-      } catch (err) {}
-    }
-
     const { status, priority, subject, description, customerName, customerEmail } =
       request.body;
 
@@ -323,23 +336,54 @@ export async function updateTicketController(request, response) {
       }
     }
 
-    if (ticket) {
-      if (status) ticket.status = status;
-      if (priority) ticket.priority = priority;
-      if (subject) ticket.subject = subject.trim();
-      if (description) ticket.description = description.trim();
-      if (customerName) ticket.customerName = customerName.trim();
-      if (customerEmail) ticket.customerEmail = customerEmail.trim().toLowerCase();
-      await ticket.save();
+    if (customerEmail !== undefined) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(customerEmail)) {
+        return response.status(400).json({
+          message: "Please provide a valid customer email address.",
+          error: true,
+          success: false,
+        });
+      }
+    }
 
-      const updatedObj = ticket.toObject();
+    if (isMongoAvailable()) {
+      const filter = {
+        $or: [
+          ...(mongoose.Types.ObjectId.isValid(id) ? [{ _id: id }] : []),
+          { ticketId: id },
+        ],
+      };
+
+      const updateData = {};
+      if (status) updateData.status = status;
+      if (priority) updateData.priority = priority;
+      if (subject !== undefined) updateData.subject = subject.trim();
+      if (description !== undefined) updateData.description = description.trim();
+      if (customerName !== undefined) updateData.customerName = customerName.trim();
+      if (customerEmail !== undefined) updateData.customerEmail = customerEmail.trim().toLowerCase();
+
+      const updated = await TicketModel.findOneAndUpdate(filter, updateData, {
+        new: true,
+        runValidators: true,
+      });
+
+      if (!updated) {
+        return response.status(404).json({
+          message: `Ticket not found with id: ${id}`,
+          error: true,
+          success: false,
+        });
+      }
+
+      const updatedObj = updated.toObject();
       const memIdx = memoryTickets.findIndex(
-        (t) => String(t._id) === String(ticket._id) || t.ticketId === ticket.ticketId
+        (t) => String(t._id) === String(updatedObj._id) || t.ticketId === updatedObj.ticketId
       );
       if (memIdx !== -1) memoryTickets[memIdx] = updatedObj;
 
       return response.status(200).json({
-        message: "Ticket updated successfully",
+        message: "Ticket updated successfully in MongoDB",
         error: false,
         success: true,
         data: updatedObj,
@@ -360,10 +404,10 @@ export async function updateTicketController(request, response) {
 
     if (status) memoryTickets[memIdx].status = status;
     if (priority) memoryTickets[memIdx].priority = priority;
-    if (subject) memoryTickets[memIdx].subject = subject.trim();
-    if (description) memoryTickets[memIdx].description = description.trim();
-    if (customerName) memoryTickets[memIdx].customerName = customerName.trim();
-    if (customerEmail) memoryTickets[memIdx].customerEmail = customerEmail.trim().toLowerCase();
+    if (subject !== undefined) memoryTickets[memIdx].subject = subject.trim();
+    if (description !== undefined) memoryTickets[memIdx].description = description.trim();
+    if (customerName !== undefined) memoryTickets[memIdx].customerName = customerName.trim();
+    if (customerEmail !== undefined) memoryTickets[memIdx].customerEmail = customerEmail.trim().toLowerCase();
     memoryTickets[memIdx].updatedAt = new Date().toISOString();
 
     return response.status(200).json({
@@ -384,33 +428,49 @@ export async function updateTicketController(request, response) {
 export async function deleteTicketController(request, response) {
   try {
     const id = request.params.id;
-    let deleted = false;
 
     if (isMongoAvailable()) {
-      try {
-        let res;
-        if (mongoose.Types.ObjectId.isValid(id)) {
-          res = await TicketModel.findByIdAndDelete(id);
-        } else {
-          res = await TicketModel.findOneAndDelete({ ticketId: id });
-        }
-        if (res) deleted = true;
-      } catch (err) {}
+      const filter = {
+        $or: [
+          ...(mongoose.Types.ObjectId.isValid(id) ? [{ _id: id }] : []),
+          { ticketId: id },
+        ],
+      };
+
+      const deleted = await TicketModel.findOneAndDelete(filter);
+
+      if (!deleted) {
+        return response.status(404).json({
+          message: `Ticket not found with id: ${id}`,
+          error: true,
+          success: false,
+        });
+      }
+
+      memoryTickets = memoryTickets.filter(
+        (t) => String(t._id) !== String(deleted._id) && t.ticketId !== deleted.ticketId
+      );
+
+      return response.status(200).json({
+        message: "Ticket deleted successfully from MongoDB",
+        error: false,
+        success: true,
+      });
     }
 
-    const initialLen = memoryTickets.length;
-    memoryTickets = memoryTickets.filter(
-      (t) => String(t._id) !== String(id) && t.ticketId !== id
+    const memIdx = memoryTickets.findIndex(
+      (t) => String(t._id) === String(id) || t.ticketId === id
     );
-    if (memoryTickets.length < initialLen) deleted = true;
 
-    if (!deleted) {
+    if (memIdx === -1) {
       return response.status(404).json({
         message: `Ticket not found with id: ${id}`,
         error: true,
         success: false,
       });
     }
+
+    memoryTickets.splice(memIdx, 1);
 
     return response.status(200).json({
       message: "Ticket deleted successfully",
