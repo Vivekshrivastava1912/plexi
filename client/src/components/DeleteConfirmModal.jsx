@@ -1,5 +1,5 @@
-import React from 'react';
-import { AlertTriangle, Trash2, X, Loader2 } from 'lucide-react';
+import React from "react";
+import { AlertTriangle, Trash2, X, Loader2 } from "lucide-react";
 
 const DeleteConfirmModal = ({
   isOpen,
@@ -11,35 +11,35 @@ const DeleteConfirmModal = ({
   if (!isOpen || !ticket) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
-            <AlertTriangle className="w-5 h-5" />
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 flex items-center justify-center p-4">
+      <div className="relative w-full max-w-sm bg-white rounded-[2px] shadow-xl border border-slate-200 overflow-hidden p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="w-8 h-8 rounded-[2px] bg-red-100 text-red-600 flex items-center justify-center">
+            <AlertTriangle className="w-4 h-4" />
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100"
+            className="text-slate-400 hover:text-slate-600 p-1 rounded-[2px] hover:bg-slate-100"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        <h3 className="text-lg font-bold text-slate-900 mb-2">Delete Support Ticket?</h3>
-        <p className="text-sm text-slate-600 mb-4">
-          Are you sure you want to permanently delete ticket{' '}
+        <h3 className="text-sm font-bold text-slate-900 mb-1.5">Delete Support Ticket?</h3>
+        <p className="text-xs text-slate-600 mb-4">
+          Are you sure you want to permanently delete ticket{" "}
           <span className="font-semibold text-slate-900">
             {ticket.ticketId || ticket._id}
-          </span>{' '}
-          ("{ticket.subject}")? This action cannot be reversed.
+          </span>
+          ? This cannot be undone.
         </p>
 
-        <div className="flex items-center justify-end gap-3 mt-6">
+        <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-slate-100">
           <button
             type="button"
             onClick={onClose}
             disabled={isDeleting}
-            className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+            className="px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-[2px] transition-colors"
           >
             Cancel
           </button>
@@ -47,16 +47,16 @@ const DeleteConfirmModal = ({
             type="button"
             onClick={onConfirm}
             disabled={isDeleting}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm shadow-red-500/20 transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-[2px] shadow-xs transition-colors disabled:opacity-50"
           >
             {isDeleting ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 <span>Deleting...</span>
               </>
             ) : (
               <>
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="w-3.5 h-3.5" />
                 <span>Delete Ticket</span>
               </>
             )}
@@ -68,4 +68,3 @@ const DeleteConfirmModal = ({
 };
 
 export default DeleteConfirmModal;
-
