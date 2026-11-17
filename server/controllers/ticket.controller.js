@@ -59,22 +59,30 @@ export async function createTicketController(request, response) {
       });
     }
 
-    let createdTicket;
+    let createdTicket = null;
 
     if (isMongoAvailable()) {
       try {
-        createdTicket = await TicketModel.create({
+        let userId = null;
+        if (request.user && mongoose.Types.ObjectId.isValid(request.user._id || request.user.id)) {
+          userId = request.user._id || request.user.id;
+        }
+
+        const newDoc = new TicketModel({
           customerName: customerName.trim(),
           customerEmail: customerEmail.trim().toLowerCase(),
           subject: subject.trim(),
           description: description.trim(),
           priority: chosenPriority,
           status: chosenStatus,
-          createdBy: request.user ? request.user._id || request.user.id : null,
+          createdBy: userId,
         });
-        memoryTickets.unshift(createdTicket.toObject());
+
+        await newDoc.save();
+        createdTicket = newDoc.toObject();
+        memoryTickets.unshift(createdTicket);
       } catch (err) {
-        createdTicket = null;
+        console.error("Create ticket MongoDB error:", err);
       }
     }
 
@@ -118,9 +126,9 @@ export async function getAllTicketsController(request, response) {
 
     if (isMongoAvailable()) {
       try {
-        all = await TicketModel.find({}).sort({ createdAt: -1 });
+        all = await TicketModel.find({}).sort({ createdAt: -1 }).lean();
         if (all.length > 0) {
-          memoryTickets = all.map((t) => (t.toObject ? t.toObject() : t));
+          memoryTickets = all;
         } else if (memoryTickets.length > 0) {
           await TicketModel.insertMany(memoryTickets);
           all = memoryTickets;
@@ -239,9 +247,9 @@ export async function getTicketDetailsController(request, response) {
     if (isMongoAvailable()) {
       try {
         if (mongoose.Types.ObjectId.isValid(id)) {
-          ticket = await TicketModel.findById(id);
+          ticket = await TicketModel.findById(id).lean();
         } else {
-          ticket = await TicketModel.findOne({ ticketId: id });
+          ticket = await TicketModel.findOne({ ticketId: id }).lean();
         }
       } catch (err) {}
     }
@@ -315,43 +323,34 @@ export async function updateTicketController(request, response) {
       }
     }
 
-    if (customerEmail !== undefined) {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(customerEmail)) {
-        return response.status(400).json({
-          message: "Please provide a valid customer email address.",
-          error: true,
-          success: false,
-        });
-      }
-    }
-
     if (ticket) {
       if (status) ticket.status = status;
       if (priority) ticket.priority = priority;
-      if (subject !== undefined) ticket.subject = subject.trim();
-      if (description !== undefined) ticket.description = description.trim();
-      if (customerName !== undefined) ticket.customerName = customerName.trim();
-      if (customerEmail !== undefined) ticket.customerEmail = customerEmail.trim().toLowerCase();
+      if (subject) ticket.subject = subject.trim();
+      if (description) ticket.description = description.trim();
+      if (customerName) ticket.customerName = customerName.trim();
+      if (customerEmail) ticket.customerEmail = customerEmail.trim().toLowerCase();
       await ticket.save();
+
+      const updatedObj = ticket.toObject();
+      const memIdx = memoryTickets.findIndex(
+        (t) => String(t._id) === String(ticket._id) || t.ticketId === ticket.ticketId
+      );
+      if (memIdx !== -1) memoryTickets[memIdx] = updatedObj;
+
+      return response.status(200).json({
+        message: "Ticket updated successfully",
+        error: false,
+        success: true,
+        data: updatedObj,
+      });
     }
 
     const memIdx = memoryTickets.findIndex(
       (t) => String(t._id) === String(id) || t.ticketId === id
     );
 
-    if (memIdx !== -1) {
-      if (status) memoryTickets[memIdx].status = status;
-      if (priority) memoryTickets[memIdx].priority = priority;
-      if (subject !== undefined) memoryTickets[memIdx].subject = subject.trim();
-      if (description !== undefined) memoryTickets[memIdx].description = description.trim();
-      if (customerName !== undefined) memoryTickets[memIdx].customerName = customerName.trim();
-      if (customerEmail !== undefined) memoryTickets[memIdx].customerEmail = customerEmail.trim().toLowerCase();
-      memoryTickets[memIdx].updatedAt = new Date().toISOString();
-      if (!ticket) ticket = memoryTickets[memIdx];
-    }
-
-    if (!ticket) {
+    if (memIdx === -1) {
       return response.status(404).json({
         message: `Ticket not found with id: ${id}`,
         error: true,
@@ -359,11 +358,19 @@ export async function updateTicketController(request, response) {
       });
     }
 
+    if (status) memoryTickets[memIdx].status = status;
+    if (priority) memoryTickets[memIdx].priority = priority;
+    if (subject) memoryTickets[memIdx].subject = subject.trim();
+    if (description) memoryTickets[memIdx].description = description.trim();
+    if (customerName) memoryTickets[memIdx].customerName = customerName.trim();
+    if (customerEmail) memoryTickets[memIdx].customerEmail = customerEmail.trim().toLowerCase();
+    memoryTickets[memIdx].updatedAt = new Date().toISOString();
+
     return response.status(200).json({
       message: "Ticket updated successfully",
       error: false,
       success: true,
-      data: ticket,
+      data: memoryTickets[memIdx],
     });
   } catch (error) {
     return response.status(500).json({
@@ -381,23 +388,28 @@ export async function deleteTicketController(request, response) {
 
     if (isMongoAvailable()) {
       try {
+        let res;
         if (mongoose.Types.ObjectId.isValid(id)) {
-          await TicketModel.deleteOne({ _id: id });
-          deleted = true;
+          res = await TicketModel.findByIdAndDelete(id);
         } else {
-          await TicketModel.deleteOne({ ticketId: id });
-          deleted = true;
+          res = await TicketModel.findOneAndDelete({ ticketId: id });
         }
+        if (res) deleted = true;
       } catch (err) {}
     }
 
-    const memIdx = memoryTickets.findIndex(
-      (t) => String(t._id) === String(id) || t.ticketId === id
+    const initialLen = memoryTickets.length;
+    memoryTickets = memoryTickets.filter(
+      (t) => String(t._id) !== String(id) && t.ticketId !== id
     );
+    if (memoryTickets.length < initialLen) deleted = true;
 
-    if (memIdx !== -1) {
-      memoryTickets.splice(memIdx, 1);
-      deleted = true;
+    if (!deleted) {
+      return response.status(404).json({
+        message: `Ticket not found with id: ${id}`,
+        error: true,
+        success: false,
+      });
     }
 
     return response.status(200).json({
