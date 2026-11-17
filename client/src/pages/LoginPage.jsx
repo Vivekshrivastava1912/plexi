@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { LifeBuoy, Lock, Mail, AlertCircle, Eye, EyeOff, Loader2, KeyRound } from "lucide-react";
 
@@ -121,6 +121,7 @@ const LoginPage = () => {
                   onChange={(e) => {
                     setEmail(e.target.value);
                     if (validationError) setValidationError("");
+                    if (error) clearError();
                   }}
                   placeholder="admin@example.com"
                   className="block w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-[2px] focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white text-slate-900"
@@ -148,6 +149,7 @@ const LoginPage = () => {
                   onChange={(e) => {
                     setPassword(e.target.value);
                     if (validationError) setValidationError("");
+                    if (error) clearError();
                   }}
                   placeholder="••••••••"
                   className="block w-full pl-9 pr-9 py-2 text-xs bg-slate-50 border border-slate-300 rounded-[2px] focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white text-slate-900"
@@ -183,6 +185,16 @@ const LoginPage = () => {
               </button>
             </div>
           </form>
+
+          <div className="mt-4 text-center text-xs text-slate-500">
+            Don't have an account?{" "}
+            <Link
+              to="/register"
+              className="text-blue-600 hover:text-blue-800 font-semibold"
+            >
+              Sign Up
+            </Link>
+          </div>
 
           <div className="mt-5 pt-4 border-t border-slate-100">
             <div className="bg-slate-50 border border-slate-200 rounded-[2px] p-3">

@@ -1,6 +1,10 @@
-export const baseURL = import.meta.env.VITE_API_URL || "/api";
+export const baseURL = "";
 
 const SummaryApi = {
+  register: {
+    url: "/api/auth/register",
+    method: "post",
+  },
   login: {
     url: "/api/auth/login",
     method: "post",

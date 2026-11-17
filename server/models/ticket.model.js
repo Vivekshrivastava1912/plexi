@@ -92,3 +92,4 @@ ticketSchema.pre("save", async function (next) {
 const TicketModel = mongoose.models.Ticket || mongoose.model("Ticket", ticketSchema);
 
 export default TicketModel;
+

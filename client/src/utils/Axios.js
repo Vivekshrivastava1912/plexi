@@ -1,8 +1,7 @@
 import axios from "axios";
-import { baseURL } from "../common/SummaryApi.js";
 
 const Axios = axios.create({
-  baseURL: baseURL,
+  baseURL: "",
   headers: {
     "Content-Type": "application/json",
   },
@@ -10,6 +9,9 @@ const Axios = axios.create({
 
 Axios.interceptors.request.use(
   async (config) => {
+    if (config.url) {
+      config.url = config.url.replace(/^\/api\/api\//, "/api/");
+    }
     const token = localStorage.getItem("token") || localStorage.getItem("support_ticket_token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -32,7 +34,7 @@ Axios.interceptors.response.use(
       localStorage.removeItem("user");
       localStorage.removeItem("support_ticket_user");
 
-      if (window.location.pathname !== "/login") {
+      if (window.location.pathname !== "/login" && window.location.pathname !== "/register") {
         window.location.href = "/login?expired=true";
       }
     }

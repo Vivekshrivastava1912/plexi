@@ -2,6 +2,13 @@ import Axios from "../utils/Axios.js";
 import SummaryApi from "../common/SummaryApi.js";
 
 export const authAPI = {
+  register: async (userData) => {
+    const response = await Axios({
+      ...SummaryApi.register,
+      data: userData,
+    });
+    return response.data;
+  },
   login: async (credentials) => {
     const response = await Axios({
       ...SummaryApi.login,

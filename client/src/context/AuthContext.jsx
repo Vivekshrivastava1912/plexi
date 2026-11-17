@@ -71,6 +71,30 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const register = async (name, email, password) => {
+    setError(null);
+    try {
+      const res = await authAPI.register({ name, email, password });
+      if (res.success && res.token) {
+        const userData = res.data || res.user;
+        localStorage.setItem("token", res.token);
+        localStorage.setItem("support_ticket_token", res.token);
+        localStorage.setItem("user", JSON.stringify(userData));
+        localStorage.setItem("support_ticket_user", JSON.stringify(userData));
+        setToken(res.token);
+        setUser(userData);
+        return { success: true };
+      } else {
+        throw new Error(res.message || "Registration failed");
+      }
+    } catch (err) {
+      const msg =
+        err.response?.data?.message || err.message || "Failed to register";
+      setError(msg);
+      return { success: false, message: msg };
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("support_ticket_token");
@@ -92,6 +116,7 @@ export const AuthProvider = ({ children }) => {
         isLoading,
         error,
         login,
+        register,
         logout,
         clearError,
       }}

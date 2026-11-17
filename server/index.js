@@ -31,6 +31,13 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.use((req, res, next) => {
+  if (req.url.startsWith("/api/api/")) {
+    req.url = req.url.replace(/^\/api\/api\//, "/api/");
+  }
+  next();
+});
+
 app.get("/api/health", (request, response) => {
   return response.status(200).json({
     message: "Server is healthy and running",
@@ -52,7 +59,6 @@ app.use("/api/*", (request, response) => {
 });
 
 app.use((err, request, response, next) => {
-  console.error("Server Error:", err);
   return response.status(err.statusCode || 500).json({
     message: err.message || "Internal Server Error",
     error: true,
@@ -63,7 +69,6 @@ app.use((err, request, response, next) => {
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(`🚀 Support Ticket Backend Server running on port ${PORT}`);
   connectDB();
 });
 

@@ -25,3 +25,4 @@ ticketRouter.route("/:id")
   .delete(deleteTicketController);
 
 export default ticketRouter;
+
